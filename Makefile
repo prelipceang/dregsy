@@ -15,12 +15,11 @@
 #
 
 .DEFAULT_GOAL := help
-SHELL = /bin/bash
 
 REPO=dregsy
 DREGSY_VERSION=$$(git describe --always --tag --dirty)
 
-BUILD_OUTPUT=build
+BUILD_OUTPUT=_build
 BINARIES=$(BUILD_OUTPUT)/bin
 ISOLATED_PKG=$(BUILD_OUTPUT)/pkg
 ISOLATED_CACHE=$(BUILD_OUTPUT)/cache
@@ -32,11 +31,11 @@ GO_IMAGE=golang:1.13.6-buster@sha256:f6cefbdd25f9a66ec7dcef1ee5deb417882b9db9629
 #
 #	${ITL}VERBOSE=y${NRM}	get detailed output
 #
-#	${ITL}ISOLATED=y${NRM}	when using this with a build target, the build will be isolated
-#			in the sense that local caches such as ${DIM}\${GOPATH}/pkg${NRM} and ${DIM}~/.cache${NRM}
-#			will not be mounted into the build container. Instead, according
-#			folders underneath ${DIM}./build${NRM} are used. These folders are removed when
-#			running ${DIM}make clean${NRM}. That way you can force a full build, where all
+#	${ITL}ISOLATED=y${NRM}	when using this with a build or test target, the build will be isolated
+#			in the sense that local caches such as ${DIM}\${GOPATH}/pkg${NRM} and ${DIM}~/.cache${NRM} will
+#			not be mounted into the container. Instead, according folders underneath
+#			the configured build folder are used. These folders are removed when
+#			running ${DIM}make clean${NRM}. That way you can force a clean build/test, where all
 #			dependencies are retrieved & built inside the container.
 #
 
@@ -45,8 +44,10 @@ ifeq ($(VERBOSE),y)
     $(warning ***** starting Makefile for goal(s) "$(MAKECMDGOALS)")
     $(warning ***** $(shell date))
     MAKEFLAGS += --trace
+    TEST_OPTS = -v
 else
     MAKEFLAGS += -s
+    TEST_OPTS =
 endif
 
 ifeq ($(MAKECMDGOALS),release)
@@ -73,39 +74,87 @@ help:
 
 
 .PHONY: release
-release: clean dregsy image
-#	clean, do an isolated build, and create container image
+release: clean dregsy imgdregsy imgtests tests
+#	clean, do an isolated build, create container images, and test
 #
 
 
 .PHONY: dregsy
-dregsy:
+dregsy: prep
 #	build the ${ITL}dregsy${NRM} binary
 #
-	mkdir -p $(BINARIES) $(ISOLATED_PKG) $(ISOLATED_CACHE)
 	docker run --rm --user $(shell id -u):$(shell id -g) \
         -v $(shell pwd)/$(BINARIES):/go/bin $(CACHE_VOLS) \
 		-v $(shell pwd):/go/src/$(REPO) -w /go/src/$(REPO) \
 		-e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 \
-		$(GO_IMAGE) go build -v -a -tags netgo -installsuffix netgo \
+		$(GO_IMAGE) go build -v -tags netgo -installsuffix netgo \
 		-ldflags "-w -X main.DregsyVersion=$(DREGSY_VERSION)" \
 		-o $(BINARIES)/dregsy ./cmd/dregsy/
 
 
-.PHONY: image
-image:
+.PHONY: imgdregsy
+imgdregsy:
 #	build the ${ITL}dregsy${NRM} container image; assumes binary was built
 #
-	docker build -t xelalex/$(REPO) -f Dockerfile \
+	docker build -t xelalex/$(REPO) -f ./hack/dregsy.Dockerfile \
 		--build-arg binaries=$(BINARIES) .
+
+
+.PHONY: imgtests
+imgtests:
+#	build the container image for running tests; assumes ${ITL}dregsy${NRM} image was built
+#
+	docker build -t xelalex/$(REPO)-tests -f ./hack/tests.Dockerfile .
+
+
+.PHONY: tests
+tests: prep
+#	run tests; assumes tests image was built and local ${ITL}Docker${NRM} registry running
+#	on localhost:5000 (start with ${DIM}make registryup${NRM});
+#
+
+	@echo "\ntests:"
+	docker run --privileged --rm  \
+		-v $(shell pwd):/go/src/$(REPO) -w /go/src/$(REPO) \
+        -v $(shell pwd)/$(BINARIES):/go/bin $(CACHE_VOLS) \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 \
+		xelalex/$(REPO)-tests sh -c "\
+			go test $(TEST_OPTS) \
+				-coverpkg=./... -coverprofile=$(BUILD_OUTPUT)/coverage.out \
+				-covermode=count ./... && \
+			go tool cover -html=$(BUILD_OUTPUT)/coverage.out \
+				-o $(BUILD_OUTPUT)/coverage.html"
+	@echo "\ncoverage report is in $(BUILD_OUTPUT)/coverage.html\n"
+
+
+.PHONY: registryup
+registryup:
+#	start local ${ITL}Docker${NRM} registry for running tests
+#
+	docker run -d --rm -p 5000:5000 --name dregsy-test-registry registry:2
+
+
+.PHONY: registrydown
+registrydown:
+#	stop local ${ITL}Docker${NRM} registry
+#
+	docker stop dregsy-test-registry
 
 
 .PHONY: clean
 clean:
 #	remove all build artifacts, including isolation caches
 #
-	[[ ! -d $(BUILD_OUTPUT) ]] || chmod -R u+w $(BUILD_OUTPUT)
-	rm -rf $(BUILD_OUTPUT)
+	[ ! -d $(BUILD_OUTPUT) ] || chmod -R u+w $(BUILD_OUTPUT)
+	rm -rf $(BUILD_OUTPUT)/*
+
+
+.PHONY: prep
+prep:
+#	prepare required directories
+#
+	mkdir -p $(BUILD_OUTPUT) $(BINARIES) $(ISOLATED_PKG) $(ISOLATED_CACHE)
 
 
 #
