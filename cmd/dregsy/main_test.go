@@ -26,14 +26,14 @@ import (
 //
 func TestSkopeo(t *testing.T) {
 	th := test.NewTestHelper(t)
-	ret := runDregsy(th, 1, 0, "-config="+th.GetFixture("skopeo.yaml"))
+	ret := runDregsy(th, 1, 0, "-config="+th.GetFixture("e2e/skopeo.yaml"))
 	th.AssertEqual(0, ret)
 }
 
 //
 func TestDocker(t *testing.T) {
 	th := test.NewTestHelper(t)
-	ret := runDregsy(th, 1, 0, "-config="+th.GetFixture("docker.yaml"))
+	ret := runDregsy(th, 1, 0, "-config="+th.GetFixture("e2e/docker.yaml"))
 	th.AssertEqual(0, ret)
 }
 

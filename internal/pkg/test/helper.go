@@ -18,13 +18,16 @@ package test
 
 import (
 	"fmt"
-	"path"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+//
+var StackTraceDepth = 1
 
 //
 type TestHelper struct {
@@ -34,6 +37,16 @@ type TestHelper struct {
 //
 func NewTestHelper(t *testing.T) *TestHelper {
 	return &TestHelper{t}
+}
+
+//
+func (t *TestHelper) GetFixture(fx string) string {
+	_, f, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("cannot determine fixture path")
+	}
+	p := filepath.Join(filepath.Dir(f), "../../../test/fixtures", fx)
+	return p
 }
 
 //
@@ -47,9 +60,54 @@ func (t *TestHelper) AssertFalse(got bool) {
 }
 
 //
+func (t *TestHelper) AssertNil(i interface{}) {
+	if i != nil && !reflect.ValueOf(i).IsZero() {
+		t.raiseError("want nil, not \"%v\"", i)
+	}
+}
+
+//
+func (t *TestHelper) AssertNotNil(i interface{}) {
+	if i == nil || reflect.ValueOf(i).IsZero() {
+		t.raiseError("want non-nil, not nil")
+	}
+}
+
+//
+func (t *TestHelper) AssertError(e error, msg string) {
+	if e == nil {
+		t.raiseError("want error, but got none")
+	} else if !strings.Contains(e.Error(), msg) {
+		t.raiseError(
+			"want error message to contain '%s', but got '%s'", msg, e.Error())
+	}
+}
+
+//
+func (t *TestHelper) AssertNoError(e error) {
+	if e != nil {
+		t.raiseError("don't want error: %v", e)
+	}
+}
+
+//
 func (t *TestHelper) AssertEqual(want, got interface{}) {
 	if want != got {
 		t.raiseError("want \"%v\", not \"%v\"", want, got)
+	}
+}
+
+//
+func (t *TestHelper) AssertNotEqual(want, got interface{}) {
+	if want == got {
+		t.raiseError("don't want \"%v\"", want)
+	}
+}
+
+//
+func (t *TestHelper) AssertQuiet(message string) {
+	if message != "" {
+		t.raiseError(message)
 	}
 }
 
@@ -75,6 +133,8 @@ func (t *TestHelper) AssertEqualSlices(want, got []string) {
 				break
 			}
 		}
+	} else {
+		e = true
 	}
 
 	if e {
@@ -83,80 +143,80 @@ func (t *TestHelper) AssertEqualSlices(want, got []string) {
 }
 
 //
-func (t *TestHelper) AssertNotEqual(want, got interface{}) {
-	if want == got {
-		t.raiseError("don't want \"%v\"", want)
+func (t *TestHelper) AssertEqualMaps(want, got map[string]string) {
+	if len(want) != len(got) {
+		t.raiseError("maps of different size: want %d, not %d",
+			len(want), len(got))
 	}
-}
-
-//
-func (t *TestHelper) AssertNil(got interface{}) {
-	if nil != got {
-		t.raiseError("want nil, not \"%v\"", got)
+	for k, v := range want {
+		val, ok := got[k]
+		if !ok {
+			t.raiseError("expected map to contain key '%s'", k)
+		}
+		if val != v {
+			t.raiseError("key '%s' mapped to wrong value: want '%s', not '%s'",
+				k, v, val)
+		}
 	}
-}
-
-//
-func (t *TestHelper) AssertNotNil(got interface{}) {
-	if nil == got {
-		t.raiseError("want non-nil")
-	}
-}
-
-//
-func (t *TestHelper) AssertNoError(e error) {
-	if e != nil {
-		t.raiseError("don't want error: %v", e)
-	}
-}
-
-//
-func (t *TestHelper) GetFixture(fx string) string {
-	_, f, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatalf("cannot determine fixture path")
-	}
-	p := path.Join(path.Dir(f), "../../../test/fixtures", fx)
-	return p
 }
 
 //
 func (t *TestHelper) raiseError(format string, args ...interface{}) {
-	t.Error(fmt.Sprintf("%s%s", caller(), fmt.Sprintf(format, args...)))
+	stack := ""
+	for _, s := range caller(StackTraceDepth) {
+		stack = fmt.Sprintf("%s%s", stack, s)
+	}
+	t.Errorf("%s\n%s\n\n", stack, fmt.Sprintf(format, args...))
 }
 
 //
-func caller() string {
+func caller(depth int) []string {
 
 	// check where we are
 	fpcs := make([]uintptr, 1)
 	n := runtime.Callers(2, fpcs)
 
 	if n == 0 {
-		return "n/a"
+		return []string{"n/a"}
 	}
 
 	pc := fpcs[0]
 	thisFile, thisLine := runtime.FuncForPC(pc).FileLine(pc)
+
+	// calculate number of required backspaces to remove `helper.go` prompt
+	_, thisFileComp := filepath.Split(thisFile)
+	back := len(thisFileComp) + len(strconv.Itoa(thisLine)) + 3
+
+	// collect stack, starting at first file in call stack that's not this file,
+	// and containing depth number of levels
+
 	var file string
 	var line int
+
+	var ret []string
+	collect := false
 	ok := true
+	skip := 0
 
-	// stop at first file in call stack that's not this file
-	for skip := 0; ok == true; skip++ {
+	for {
 		pc, file, line, ok = runtime.Caller(skip)
-		if file != thisFile {
-			break
+		if !ok {
+			return []string{"n/a"}
 		}
+		if file != thisFile {
+			collect = true
+		}
+		if collect {
+			fun := strings.Split(runtime.FuncForPC(pc).Name(), "/")
+			ret = append(ret, fmt.Sprintf("%s%s:%d  ::  %s()\n",
+				strings.Repeat("\b", back), file, line, fun[len(fun)-1]))
+			if len(ret) == depth {
+				break
+			}
+			back = 4 // one tab stop from now on
+		}
+		skip++
 	}
 
-	if !ok {
-		return "n/a"
-	}
-
-	// calculate number of required backspaces
-	_, thisFile = filepath.Split(thisFile)
-	_, file = filepath.Split(file)
-	back := len(thisFile) + len(strconv.Itoa(thisLine)) + 3
-	return fmt.Sprintf("%s%s:%d\n", strings.Repeat("\b", back), file, line)
+	return ret
 }

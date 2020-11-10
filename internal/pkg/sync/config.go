@@ -442,11 +442,14 @@ func LoadConfig(file string) (*syncConfig, error) {
 	}
 
 	config := &syncConfig{}
-	err = yaml.Unmarshal(data, config)
 
-	if err != nil {
+	if err = yaml.Unmarshal(data, config); err != nil {
 		return nil, fmt.Errorf("error parsing config file '%s': %v", file, err)
 	}
 
-	return config, config.validate()
+	if err = config.validate(); err != nil {
+		return nil, err
+	}
+
+	return config, nil
 }
