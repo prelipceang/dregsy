@@ -46,7 +46,7 @@ type Sync struct {
 }
 
 //
-func New(conf *syncConfig) (*Sync, error) {
+func New(conf *SyncConfig) (*Sync, error) {
 
 	sync := &Sync{}
 
@@ -106,7 +106,7 @@ func (s *Sync) Dispose() {
 }
 
 //
-func (s *Sync) SyncFromConfig(conf *syncConfig) error {
+func (s *Sync) SyncFromConfig(conf *SyncConfig) error {
 
 	if err := s.relay.Prepare(); err != nil {
 		return err
@@ -121,7 +121,7 @@ func (s *Sync) SyncFromConfig(conf *syncConfig) error {
 	}
 
 	// periodic tasks
-	c := make(chan *task)
+	c := make(chan *Task)
 	ticking := false
 
 	for _, t := range conf.Tasks {
@@ -167,7 +167,7 @@ func (s *Sync) SyncFromConfig(conf *syncConfig) error {
 }
 
 //
-func (s *Sync) syncTask(t *task) {
+func (s *Sync) syncTask(t *Task) {
 
 	if t.tooSoon() {
 		log.Info("task '%s' fired too soon, skipping", t.Name)
@@ -181,8 +181,8 @@ func (s *Sync) syncTask(t *task) {
 	for _, m := range t.Mappings {
 		log.Info("mapping '%s' to '%s'", m.From, m.To)
 		src, trgt := t.mappingRefs(m)
-		t.fail(log.Error(t.Source.refreshAuth()))
-		t.fail(log.Error(t.Target.refreshAuth()))
+		t.fail(log.Error(t.Source.RefreshAuth()))
+		t.fail(log.Error(t.Target.RefreshAuth()))
 		t.fail(log.Error(t.ensureTargetExists(trgt)))
 		t.fail(log.Error(s.relay.Sync(
 			src, t.Source.Auth, t.Source.SkipTLSVerify,

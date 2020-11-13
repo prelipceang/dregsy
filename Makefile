@@ -15,6 +15,7 @@
 #
 
 .DEFAULT_GOAL := help
+SHELL = /bin/bash
 
 REPO=dregsy
 DREGSY_VERSION=$$(git describe --always --tag --dirty)
@@ -26,12 +27,28 @@ ISOLATED_CACHE=$(BUILD_OUTPUT)/cache
 
 GO_IMAGE=golang:1.13.6-buster@sha256:f6cefbdd25f9a66ec7dcef1ee5deb417882b9db9629a724af8a332fe54e3f7b3
 
-##
+## makerc
+# You need to set the following parameters in configuration file ${DIM}.makerc${NRM}, with every line
+# containing a parameter in the form ${ITL}key = value${NRM}:
+#
+#	${ITL}DREGSY_TEST_ECR_REGISTRY${NRM}	the ECR instance to use
+#	${ITL}DREGSY_TEST_ECR_REPO${NRM} 		the repo to use within the ECR instance;
+#					defaults to ${DIM}dregsy/test${NRM}
+#
+#	${ITL}AWS_ACCESS_KEY_ID${NRM}	credentials for AWS account in which ECR instance is located; the
+#	${ITL}AWS_SECRET_ACCESS_KEY${NRM}	user associated with these credentials needs to have sufficient
+#				IAM permissions for pulling & pushing from/to the ECR instance
+#
+#	If any of the above settings without a default is missing, ECR tests are skipped!
+#
+-include .makerc
+
+## env
 # You can set the following environment variables when calling make:
 #
 #	${ITL}VERBOSE=y${NRM}	get detailed output
 #
-#	${ITL}ISOLATED=y${NRM}	when using this with a build or test target, the build will be isolated
+#	${ITL}ISOLATED=y${NRM}	when using this with a build or test target, the build/test will be isolated
 #			in the sense that local caches such as ${DIM}\${GOPATH}/pkg${NRM} and ${DIM}~/.cache${NRM} will
 #			not be mounted into the container. Instead, according folders underneath
 #			the configured build folder are used. These folders are removed when
@@ -112,20 +129,23 @@ tests: prep
 #	run tests; assumes tests image was built and local ${ITL}Docker${NRM} registry running
 #	on localhost:5000 (start with ${DIM}make registryup${NRM});
 #
-
-	@echo "\ntests:"
+ifeq (,$(wildcard .makerc))
+	$(warning ***** Missing .makerc! Some tests may be skipped or fail!)
+endif
+	@echo -e "\ntests:"
 	docker run --privileged --rm  \
 		-v $(shell pwd):/go/src/$(REPO) -w /go/src/$(REPO) \
         -v $(shell pwd)/$(BINARIES):/go/bin $(CACHE_VOLS) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 \
+		--env-file <(sed -E 's/\ +=\ +/=/g' .makerc) \
 		xelalex/$(REPO)-tests sh -c "\
 			go test $(TEST_OPTS) \
 				-coverpkg=./... -coverprofile=$(BUILD_OUTPUT)/coverage.out \
 				-covermode=count ./... && \
 			go tool cover -html=$(BUILD_OUTPUT)/coverage.out \
 				-o $(BUILD_OUTPUT)/coverage.html"
-	@echo "\ncoverage report is in $(BUILD_OUTPUT)/coverage.html\n"
+	@echo -e "\ncoverage report is in $(BUILD_OUTPUT)/coverage.html\n"
 
 
 .PHONY: registryup

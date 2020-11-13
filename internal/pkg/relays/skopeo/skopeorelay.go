@@ -80,8 +80,8 @@ func (r *SkopeoRelay) Sync(srcRef, srcAuth string, srcSkipTLSVerify bool,
 	destRef, destAuth string, destSkipTLSVerify bool,
 	tags []string, verbose bool) error {
 
-	srcCreds := decodeJSONAuth(srcAuth)
-	destCreds := decodeJSONAuth(destAuth)
+	srcCreds := DecodeJSONAuth(srcAuth)
+	destCreds := DecodeJSONAuth(destAuth)
 
 	cmd := []string{
 		"--insecure-policy",
@@ -116,7 +116,7 @@ func (r *SkopeoRelay) Sync(srcRef, srcAuth string, srcSkipTLSVerify bool,
 
 	if len(tags) == 0 {
 		var err error
-		tags, err = listAllTags(srcRef, srcCreds, srcCertDir, srcSkipTLSVerify)
+		tags, err = ListAllTags(srcRef, srcCreds, srcCertDir, srcSkipTLSVerify)
 		if err != nil {
 			return err
 		}

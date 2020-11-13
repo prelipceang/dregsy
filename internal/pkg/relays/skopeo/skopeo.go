@@ -55,7 +55,7 @@ type tagList struct {
 }
 
 //
-func listAllTags(ref, creds, certDir string, skipTLSVerify bool) (
+func ListAllTags(ref, creds, certDir string, skipTLSVerify bool) (
 	[]string, error) {
 
 	cmd := []string{
@@ -81,7 +81,8 @@ func listAllTags(ref, creds, certDir string, skipTLSVerify bool) (
 
 	if err := runSkopeo(bufOut, bufErr, true, cmd...); err != nil {
 		return nil,
-			fmt.Errorf("error listing image tags: %s, %v", bufErr.String(), err)
+			fmt.Errorf("error listing image tags for ref '%s': %s, %v",
+				ref, bufErr.String(), err)
 	}
 
 	list, err := decodeTagList(bufOut.Bytes())
@@ -136,7 +137,7 @@ func decodeTagList(tl []byte) (*tagList, error) {
 }
 
 //
-func decodeJSONAuth(authBase64 string) string {
+func DecodeJSONAuth(authBase64 string) string {
 
 	if authBase64 == "" {
 		return ""

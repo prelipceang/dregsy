@@ -25,13 +25,14 @@ import (
 	"github.com/xelalexv/dregsy/internal/pkg/sync"
 )
 
+//
 var DregsyVersion string
 
-var syncInstance *sync.Sync
-var dregsyExitCode int
-
-var inTestRound bool
+// for invoking dregsy command during testing
+var testRound bool
 var testArgs []string
+var testSync chan *sync.Sync
+var dregsyExitCode int
 
 //
 func version() {
@@ -46,7 +47,7 @@ func main() {
 	fs := flag.NewFlagSet("dregsy", flag.ContinueOnError)
 	configFile := fs.String("config", "", "path to config file")
 
-	if inTestRound {
+	if testRound {
 		if len(testArgs) > 0 {
 			failOnError(fs.Parse(testArgs))
 		} else {
@@ -67,12 +68,15 @@ func main() {
 	conf, err := sync.LoadConfig(*configFile)
 	failOnError(err)
 
-	syncInstance, err = sync.New(conf)
+	s, err := sync.New(conf)
 	failOnError(err)
 
-	err = syncInstance.SyncFromConfig(conf)
-	syncInstance.Dispose()
-	syncInstance = nil
+	if testRound {
+		testSync <- s
+	}
+
+	err = s.SyncFromConfig(conf)
+	s.Dispose()
 	failOnError(err)
 }
 
@@ -87,7 +91,7 @@ func failOnError(err error) {
 //
 func exit(code int) {
 	dregsyExitCode = code
-	if !inTestRound {
+	if !testRound {
 		os.Exit(code)
 	}
 }

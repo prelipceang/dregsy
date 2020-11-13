@@ -51,9 +51,15 @@ function synopsis {
             /^[^#].*$/{f=0} f' \
         | tr -d '#')"
 
-    echo -e "\n\n${BLD}NOTES${NRM}"
+    echo -e "\n${BLD}NOTES${NRM}\n"
 
-    # project env settings
+    # .makerc settings
+    print_formatted_help "$(cat "${files[@]}" \
+        | awk '/^## makerc$/{f=1; next} /^[^#].*$/{f=0} /^$/{f=0} f' \
+        | tr -d '#')"
+    echo
+
+    # env settings
     print_formatted_help "$(cat "${files[@]}" \
         | awk '/^## env$/{f=1; next} /^[^#].*$/{f=0} /^$/{f=0} f' \
         | tr -d '#')"

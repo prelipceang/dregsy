@@ -124,17 +124,39 @@ func (t *TestHelper) AssertOneOf(want []string, got string) {
 //
 func (t *TestHelper) AssertEqualSlices(want, got []string) {
 
-	e := false
+	e := len(want) != len(got)
 
-	if len(want) == len(got) {
+	if !e {
 		for ix := range want {
 			if want[ix] != got[ix] {
 				e = true
 				break
 			}
 		}
-	} else {
-		e = true
+	}
+
+	if e {
+		t.raiseError("want \"%v\", not \"%v\"", want, got)
+	}
+}
+
+//
+func (t *TestHelper) AssertEquivalentSlices(want, got []string) {
+
+	e := len(want) != len(got)
+
+	mWant := make(map[string]bool, len(want))
+
+	if !e {
+		for _, w := range want {
+			mWant[w] = true
+		}
+		for _, g := range got {
+			if !mWant[g] {
+				e = true
+				break
+			}
+		}
 	}
 
 	if e {

@@ -69,9 +69,10 @@ func TestInvalidSyncConfigs(t *testing.T) {
 }
 
 //
-func tryConfig(th *test.TestHelper, file, err string) (*syncConfig, error) {
+func tryConfig(th *test.TestHelper, file, err string) (*SyncConfig, error) {
 
 	test.StackTraceDepth = 2
+	defer func() { test.StackTraceDepth = 1 }()
 
 	c, e := LoadConfig(th.GetFixture(file))
 	if err != "" {
@@ -82,6 +83,5 @@ func tryConfig(th *test.TestHelper, file, err string) (*syncConfig, error) {
 		th.AssertNotNil(c)
 	}
 
-	test.StackTraceDepth = 1
 	return c, e
 }
